@@ -9,31 +9,35 @@ output:
 
 I have provided you with data about the 5,000 fastest growing companies in the US, as compiled by Inc. magazine. lets read this in:
 
-```{r}
-
+```{r import-data}
+# import data from github
 inc <- read.csv("https://raw.githubusercontent.com/charleyferrari/CUNY_DATA_608/master/module1/Data/inc5000_data.csv", header= TRUE)
-
 ```
 
 And lets preview this data:
 
-```{r}
-
+```{r data-preview}
+# preview data
 head(inc)
-
 ```
-```{r}
 
+```{r summarize}
+# view data summary
 summary(inc)
-
 ```
 
 Think a bit on what these summaries mean. Use the space below to add some more relevant non-visual exploratory information you think helps you understand this data:
 
-```{r}
+Ok, for me its easier to write out and define what they mean:
 
+- `Rank` is the rank of the company in regard to `Growth Rate` (categorical ordinal)
+- `Name` is the name of the company 
+- `Growth Rate` is the rate at which the company has grown over a period of time (numeric continuous).
+- `Revenue` is the amount of money each company has made 
+
+```{r additional-summary-data}
 # Insert your code here, create more chunks as necessary
-
+?summary
 ```
 
 ## Question 1
