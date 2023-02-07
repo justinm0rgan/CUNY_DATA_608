@@ -5,6 +5,11 @@ output:
   html_notebook: default
 ---
 
+```{r load-packages, message=FALSE}
+library(tidyverse)
+```
+
+
 **Principles of Data Visualization and Introduction to ggplot2**
 
 I have provided you with data about the 5,000 fastest growing companies in the US, as compiled by Inc. magazine. lets read this in:
@@ -30,24 +35,56 @@ Think a bit on what these summaries mean. Use the space below to add some more r
 
 Ok, for me its easier to write out and define what they mean:
 
-- `Rank` is the rank of the company in regard to `Growth Rate` (categorical ordinal)
+- `Rank` is the rank of the company in regard to `Growth Rate` (ordinal)
 - `Name` is the name of the company 
-- `Growth Rate` is the rate at which the company has grown over a period of time (numeric continuous).
-- `Revenue` is the amount of money each company has made 
+- `Growth Rate` is the rate at which the company has grown over a period of time (continuous).
+- `Revenue` is the amount of money each company has made (continuous)
+- `Industry` is a categorical variable stating the industry type of the company
+- `Employees` are the number of employees (continuous)
+- `City` is the city where the company is located
+- `State` is the state where the company is located
+
+So for any object data types the `summary()` function is simply counting the records and defining the class type as `character`. For numeric data types we are getting some summary statistics including:
+- Min
+- 1st Quartile
+- Median
+- Mean
+- 3rd Quartile
+- Max
+- How many NA's
+
+Some grouping by categorical data would help me better understand where companies that have high `Growth Rate` tend to be located.
 
 ```{r additional-summary-data}
 # Insert your code here, create more chunks as necessary
-?summary
+(top_5_states <- inc %>% 
+  group_by(State) %>% 
+  tally(sort = T) %>% 
+  head())
+
+# top 5 states with most companies and average growth rate
+inc %>% 
+  group_by(State) %>%
+  summarise(n = n(), mean_growth_rate = round(mean(Growth_Rate),2)) %>% 
+  arrange(desc(n)) %>% 
+  head() %>% 
+  arrange(desc(mean_growth_rate))
 ```
 
 ## Question 1
 
 Create a graph that shows the distribution of companies in the dataset by State (ie how many are in each state). There are a lot of States, so consider which axis you should use. This visualization is ultimately going to be consumed on a 'portrait' oriented screen (ie taller than wide), which should further guide your layout choices.
 
-```{r}
-
+```{r question-1}
 # Answer Question 1 here
-
+inc %>% 
+  group_by(State) %>% 
+  summarise(count = n()) %>%
+  ggplot() +
+    geom_bar(aes(count, reorder(State, count), fill = count), 
+             stat = "identity") +
+    labs(x="Count", y="State", title = "Distribution of Companies by State") +
+    guides(fill = "none")
 ```
 
 ## Quesiton 2
