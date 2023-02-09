@@ -7,6 +7,7 @@ output:
 
 ```{r load-packages, message=FALSE}
 library(tidyverse)
+library(ggstatsplot)
 ```
 
 
@@ -83,18 +84,35 @@ inc %>%
   ggplot() +
     geom_bar(aes(count, reorder(State, count), fill = count), 
              stat = "identity") +
-    labs(x="Count", y="State", title = "Distribution of Companies by State") +
-    guides(fill = "none")
+    scale_fill_gradient(low = "white", high = "darkblue") +
+    labs(x="Count", y="State", 
+         title = "Distribution of Companies by State") +
+    theme(plot.title.position = "plot",
+          plot.title = element_text(hjust = 0.5,
+                                    size = 18),
+          axis.text.y = element_text(size = 6),
+          axis.title.y = element_text(size = 12),
+          legend.position = "none")
 ```
 
 ## Quesiton 2
 
 Lets dig in on the state with the 3rd most companies in the data set. Imagine you work for the state and are interested in how many people are employed by companies in different industries. Create a plot that shows the average and/or median employment by industry for companies in this state (only use cases with full data, use R's `complete.cases()` function.) In addition to this, your graph should show how variable the ranges are, and you should deal with outliers.
 
-```{r}
-
+```{r question-2}
 # Answer Question 2 here
+# isloate state with 3rd most highest companies (NY)
+inc_ny <- inc[inc$State == "NY",]
 
+# group dataset by industry and employee amount
+inc_ny %>% 
+  group_by(Industry) %>% 
+  summarise(n_comp = n(),
+            emp_min = min(Employees),
+            emp_max = max(Employees),
+            emp_mean = round(mean(Employees)),
+            emp_med = round(median(Employees))) %>% 
+  arrange(desc(n_comp))
 ```
 
 ## Question 3
