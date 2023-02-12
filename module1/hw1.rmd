@@ -7,6 +7,7 @@ output:
 
 ```{r load-packages, message=FALSE}
 library(tidyverse)
+library(plotrix)
 library(ggstatsplot)
 ```
 
@@ -95,7 +96,7 @@ inc %>%
           legend.position = "none")
 ```
 
-## Quesiton 2
+## Question 2
 
 Lets dig in on the state with the 3rd most companies in the data set. Imagine you work for the state and are interested in how many people are employed by companies in different industries. Create a plot that shows the average and/or median employment by industry for companies in this state (only use cases with full data, use R's `complete.cases()` function.) In addition to this, your graph should show how variable the ranges are, and you should deal with outliers.
 
@@ -104,23 +105,177 @@ Lets dig in on the state with the 3rd most companies in the data set. Imagine yo
 # isloate state with 3rd most highest companies (NY)
 inc_ny <- inc[inc$State == "NY",]
 
-# group dataset by industry and employee amount
-inc_ny %>% 
-  group_by(Industry) %>% 
-  summarise(n_comp = n(),
-            emp_min = min(Employees),
-            emp_max = max(Employees),
-            emp_mean = round(mean(Employees)),
-            emp_med = round(median(Employees))) %>% 
-  arrange(desc(n_comp))
+# look at summary for NY employees column
+summary(inc_ny$Employees)
 ```
+
+Let's visualize `Employees` in a boxplot
+
+```{r boxplot-employees}
+inc_ny %>% 
+  ggplot() +
+    geom_boxplot(aes(Employees)) +
+    coord_flip()
+```
+
+Looks like we have some extreme variation, wonder what industries this is in.
+
+Let's group by industry and create min, max, mean and median columns sorted decreasing by max.
+
+First let's create custom function.
+
+```{r grouped-by-industry}
+# create group by function for particular column 
+# aggregates by another and sorts descending by another (default max)
+groupby_column <- function(df, col_grp, agg_col, sort_col=max_grp) {
+  
+  # quote columns
+  col_grp <- dplyr::enquo(col_grp)
+  agg_col <- dplyr::enquo(agg_col)
+  sort_col <- dplyr::enquo(sort_col)
+  
+  # groupby and add aggreations
+  result <- df %>% 
+    dplyr::group_by(!!col_grp) %>% 
+    dplyr::summarise(n_grp = n(),
+              min_grp = min(!!agg_col),
+              max_grp = max(!!agg_col),
+              mean_grp = round(mean(!!agg_col),2),
+              med_grp = round(median(!!agg_col),2)) %>% 
+    arrange(desc(!!sort_col))
+  
+  return(result)
+}
+```
+
+Let's apply the custom function.
+
+```{r groupby-ind-agg-emp}
+# apply function to dataset groupby Industry, aggregated by Employees
+(inc_ny_grouped <- groupby_column(df = inc_ny, 
+                                  col_grp = Industry, 
+                                  agg_col = Employees))
+```
+
+Extreme outliers in `Business Products & Services` and `Consumer Products & Services` will skew any visualizations. Try as is first.
+
+Try with `geom_crossbar()`
+
+First create custom function.
+
+```{r graph-prob-2}
+# create custom function to plot with geom_crossbar
+# enter df, x, y, sort order for x, ymin, ymax and fill (default grey)
+crossbar_plot <- function(df, x, y, sort_x, ymin, ymax, 
+                          fill ="grey", xlab="", ylab="Range", 
+                          title = "", width = 0.5) {
+  # quote columns
+  x <- dplyr::enquo(x)
+  y <- dplyr::enquo(y)
+  sort_x <- dplyr::enquo(sort_x)
+  ymin <- dplyr::enquo(ymin)
+  ymax <- dplyr::enquo(ymax)
+  
+  # plot
+  result <- df %>% 
+    ggplot(aes(x = reorder(as.factor(!!x), !!sort_x), y = !!y)) +
+      geom_crossbar(aes(ymin = !!ymin, ymax = !!ymax), width = width, 
+                fill = fill) + coord_flip() + 
+      labs(x = xlab, y=ylab, title = title)
+  
+  return(result)
+}
+
+```
+
+Let's try out custom function.
+
+```{r plot-med-emp-ind}
+# plot by Median Employee by Industry
+crossbar_plot(inc_ny_grouped, Industry, med_grp, med_grp, min_grp, max_grp,
+              title = "Median Employee by Industry")
+```
+Doesn't deal with outliers well, impossible to tell what actual median is. This is NOT a good visualation.
+
+Try Log transform and re-plot.
+
+### Transformation
+
+```{r log-transform-Employee-col}
+# log10 transform Employee column
+(inc_ny_emp_log <- inc_ny %>% 
+  mutate(emp_log = round(log10(Employees)),2) %>%
+  select(Rank, Name, Employees, emp_log, everything()) %>% 
+  arrange(desc(emp_log)))
+```
+
+Apply customer `groupby_column()` function
+
+```{r groupby-log-emp}
+(inc_ny_emp_log_grp <- groupby_column(inc_ny_emp_log, Industry, emp_log))
+```
+
+Let's re-plot with custom `crossbar_plot()` function.
+
+```{r plot-emp-log-crossbar}
+# plot by Median Employee by Industry
+crossbar_plot(inc_ny_emp_log_grp, 
+              Industry, med_grp, med_grp, min_grp, max_grp,
+              title = "Median Employee by Industry")
+```
+
+This is too generalized, also difficult to communicate range and median in log format to stakeholders.
+
+Let's try dropping outliers 
+
+### Drop Outliers
+
+Let's classify outliers in the typical manner +- 1.5 * interquartile range 
+
+```{r drop-Employee-outliers}
+# find quartiles
+quartiles <- stats::quantile(inc_ny$Employees, probs=c(.01,.99), na.rm=F)
+
+# get IQR
+IQR <- stats::IQR(inc_ny$Employees)
+
+# define lower and upper outliers
+lower <- quartiles[1] - 1.5*IQR
+upper <- quartiles[2] + 1.5*IQR
+
+# subset data set removing outliers
+(inc_ny_no_outlier <- 
+  subset(inc_ny, inc_ny$Employees > lower & inc_ny$Employees < upper))
+
+# dimensions after
+dim_outlier <-as.numeric(dim(inc_ny)[1])
+dim_no_outlier <- as.numeric(dim(inc_ny_no_outlier)[1])
+
+# compare records of dataset
+print(paste0("Rows prior to outlier reduction ", dim_outlier))
+print(paste0("Rows after 1% outlier reduction ",dim_no_outlier))
+```
+
+Defining outliers with the classic 
+$$Lower = Q1 - (1.5*IQR)\\Upper = Q1 + (1.5*IQR)$$ 
+
+removes 45 rows which is too drastic, so I chose to remove only 1% from top and bottom which only removes the top 3 rows. Different quantiles could be chosen as well. 
+
+```{r group-plot-no-outliers}
+# groupby and plot without outliers
+groupby_column(inc_ny_no_outlier, Industry, Employees) %>% 
+  crossbar_plot(Industry, med_grp, med_grp, min_grp, max_grp,
+              title = "Median Employee in NY State by Industry (No Outliers)")
+```
+
+This showcases the median and range of `Employees` by `Industry` in NY state.
+That said, it is important to understand which records were removed. If I had more time I would compute that and experiment with more quantiles.
 
 ## Question 3
 
 Now imagine you work for an investor and want to see which industries generate the most revenue per employee. Create a chart that makes this information clear. Once again, the distribution per industry should be shown.
 
 ```{r}
-
 # Answer Question 3 here
 
 ```
