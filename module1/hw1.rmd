@@ -247,8 +247,8 @@ lower <- quartiles[1] - 1.5*IQR
 upper <- quartiles[2] + 1.5*IQR
 
 # subset data set removing outliers
-(inc_ny_no_outlier <- 
-  subset(inc_ny, inc_ny$Employees > lower & inc_ny$Employees < upper))
+inc_ny_no_outlier <- 
+  subset(inc_ny, inc_ny$Employees > lower & inc_ny$Employees < upper)
 
 # dimensions after
 dim_outlier <-as.numeric(dim(inc_ny)[1])
@@ -257,6 +257,9 @@ dim_no_outlier <- as.numeric(dim(inc_ny_no_outlier)[1])
 # compare records of dataset
 print(paste0("Rows prior to outlier reduction ", dim_outlier))
 print(paste0("Rows after 1% outlier reduction ",dim_no_outlier))
+
+# preview
+head(inc_ny_no_outlier)
 ```
 
 Defining outliers with the classic 
