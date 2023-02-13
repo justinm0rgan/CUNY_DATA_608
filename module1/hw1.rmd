@@ -9,6 +9,7 @@ output:
 library(tidyverse)
 library(plotrix)
 library(ggstatsplot)
+library(ggridges)
 ```
 
 
@@ -275,9 +276,25 @@ That said, it is important to understand which records were removed. If I had mo
 
 Now imagine you work for an investor and want to see which industries generate the most revenue per employee. Create a chart that makes this information clear. Once again, the distribution per industry should be shown.
 
-```{r}
-# Answer Question 3 here
+```{r question-3-group}
+# group by Industry then get revenue per emp
+(inc_ny_rev_emp <- inc_ny %>% 
+  group_by(Industry) %>% 
+  summarise(n = n(),
+            num_emp = sum(Employees),
+            rev_sum = sum(Revenue)) %>% 
+  mutate(rev_emp_per_1k = round((rev_sum / num_emp) / 1000)) %>%
+  select(Industry, n, rev_emp_per_1k) %>% 
+  arrange(desc(rev_emp_per_1k)))
 
 ```
+
+```{r question-3-plot}
+inc_ny_rev_emp %>% 
+  ggplot() +
+    geom_bar(aes(Industry, rev_emp_per_1k), stat = "Identity") +
+    coord_flip()
+```
+
 
 
