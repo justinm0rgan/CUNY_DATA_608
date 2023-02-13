@@ -8,9 +8,7 @@ output:
 
 ```{r load-packages, message=FALSE}
 library(tidyverse)
-library(plotrix)
 library(ggstatsplot)
-library(ggridges)
 ```
 
 
@@ -205,10 +203,13 @@ Try Log transform and re-plot.
 
 ```{r log-transform-Employee-col}
 # log10 transform Employee column
-(inc_ny_emp_log <- inc_ny %>% 
+inc_ny_emp_log <- inc_ny %>% 
   mutate(emp_log = round(log10(Employees)),2) %>%
   select(Rank, Name, Employees, emp_log, everything()) %>% 
-  arrange(desc(emp_log)))
+  arrange(desc(emp_log))
+
+# preview
+head(inc_ny_emp_log)
 ```
 
 Apply customer `groupby_column()` function
@@ -293,8 +294,11 @@ Now imagine you work for an investor and want to see which industries generate t
 ```{r question-3-plot}
 inc_ny_rev_emp %>% 
   ggplot() +
-    geom_bar(aes(rev_emp_per_1k, reorder(Industry, rev_emp_per_1k)), stat = "Identity")
+    geom_bar(aes(rev_emp_per_1k, reorder(Industry, rev_emp_per_1k)), 
+             stat = "Identity") +
+    scale_x_continuous(labels = function(x) scales::dollar(x, suffix = "k")) +
+    labs(y = "", x = "Revenue per Employee", 
+         title = "Revenue per Employee by Industry (NY State)")
 ```
-
-
+This doesn't show the distribution, just the revenue per employee, will need to try a different chart.
 
