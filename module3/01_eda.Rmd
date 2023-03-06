@@ -1,0 +1,277 @@
+---
+title: "EDA"
+author: "Justin Williams"
+date: "2023-03-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(leaflet)
+library(plotly)
+library(janitor)
+library(tidycensus)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(sf)
+library(BAMMtools)
+library(dotenv)
+```
+
+## Load data
+
+Import dataset
+
+```{r load-data}
+# load data
+df <- read_csv("./data/cleaned-cdc-mortality-1999-2010-2.csv",
+               show_col_types = F) %>% clean_names()
+
+# preview
+head(df)
+```
+
+## Summary Stats
+
+Ok, let's look at some summary statistics.
+
+```{r summary-stats}
+summary(df)
+```
+
+Looks like we have the following:
+
+**character**
+- `icd_chapter`- type of disease
+- `state` - state
+
+**numeric**
+- `year` - numeric categorical
+- `deaths` - numeric continuous
+- `population`- numeric continuous
+- `crude_rate` - numeric continuous
+
+## Question 1
+
+As a researcher, you frequently compare mortality rates from particular causes across different States. You need a visualization that will let you see (for 2010 only) the crude mortality rate, across all States, from one cause (for example, Neoplasms, which are effectively cancers). Create a visualization that allows you to rank States by crude mortality for each cause of death.
+
+Important aspects:
+
+- 2010 only
+- crude mortality rate
+- all states
+- rank for each cause of death
+
+Ok, let's filter data by year
+
+```{r df-year-filter}
+head(df_2010 <- df %>% 
+  filter(year == 2010))
+```
+
+Now let's implement some `group_by()` functions to look at counts per categorical variable.
+
+```{r icd-chapter}
+df_2010 %>% 
+  group_by(icd_chapter) %>% 
+  summarise(n = n()) %>% 
+  arrange(desc(n))
+```
+
+So there are 17 different disease types.
+
+### Leaflet Map
+So I could take this one of two ways, I could have the reactivity be disease type and make is a map of the continental US. Then have 17 radioButtons or a drop-down for disease type. The question with this one would be then would each disease be on its own scale? I don't think so. But this is a touch more then what the question is asking for. I could easily get geography at the state level along with population data using the `tidycensus` package and use `leaflet` to visualize.
+
+**hover text**
+- could have state name, mortality rate and population
+
+#### Example map
+
+Let's give an example of a choropleth map for ONE disease:
+
+```{r get-geography}
+# find population variable
+dec2010 <- load_variables(year = 2010,
+               dataset = "sf2")
+View(dec2010)
+
+# get data
+gdf_pop_2010 <- get_decennial(geography = "state",
+              variables = "P001001",
+              year = 2010,
+              geometry = TRUE,
+              key = Sys.getenv("CENSUS_API")) %>% 
+              st_transform(4326) %>% clean_names()
+
+head(gdf_pop_2010)
+```
+
+Download list of state abbreviations to join
+
+```{r state-abbrev-dl, message=FALSE}
+# get url
+url <- "https://raw.githubusercontent.com/jasonong/List-of-US-States/master/states.csv"
+
+# read in to df
+df_state_abbr <- read_csv(url) %>% 
+  clean_names() %>% 
+  rename(name="state",state="abbreviation")
+```
+
+Filter data by one disease and merge with shapefile.
+
+```{r filter-merge}
+# filter by 1 disease
+df_digestive <- df_2010[df_2010$icd_chapter == "Diseases of the digestive system",]
+
+# merge state abbrev with gdf
+df_merged <- gdf_pop_2010 %>% 
+  geo_join(df_state_abbr,"name","name") %>% 
+  geo_join(df_digestive, "state", "state")
+
+# preview
+head(df_merged)
+```
+
+Ok, now we can plot a basic map using `leaflet`.
+
+```{r leaflet-basic}
+# set labels
+labels <- sprintf(
+  "<h3>%s</h3><br><br/>
+  <strong>Disease Type: </strong>%s<br/>
+  <strong>Population: </strong>%s<br/>
+  <strong>Crude Motality Rate: </strong>%g ",
+  df_merged$name,
+  df_merged$icd_chapter,
+  df_merged$population,
+  df_merged$crude_rate) %>% 
+  lapply(htmltools::HTML)
+
+# set bins
+bins <- getJenksBreaks(df_merged$crude_rate, 6) # get natural breaks
+# bins <- map(.x = bins, round) %>% 
+#   unlist() # round
+
+# set color palette
+pal <- colorBin(palette = "PuBu",
+                bins = bins, 
+                domain = df_merged$crude_rate)
+
+# plot map
+leaflet_map <- df_merged %>% 
+   st_transform(4326) %>% 
+   leaflet() %>%
+   setView(lng = -95.7129,lat = 37.0902,zoom = 4) %>%
+   addProviderTiles(providers$CartoDB.Positron) %>% 
+   addPolygons(label = labels,
+               weight = 0.25,
+               color = "white",
+               smoothFactor = 0.5,
+               opacity = 1,
+               fillOpacity = 0.7,
+               fillColor = pal(df_merged$crude_rate),
+               highlightOptions = highlightOptions(weight = 1,
+                                                   color = "#666",
+                                                   fillOpacity = 0.7,
+                                                   bringToFront = T)) %>% 
+  addLegend("bottomright",
+            pal = pal,
+            values = ~crude_rate,
+            title = "Mortality Rate",
+            opacity = 0.7)
+
+leaflet_map
+```
+
+
+## Question 2
+
+Often you are asked whether particular States are improving their mortality rates (per cause) faster than, or slower than, the national average. Create a visualization that lets your clients see this for themselves for one cause of death at the time. Keep in mind that the national average should be weighted by the national population.
+
+**important points**
+- each state against national average
+- per death
+
+### Line chart
+So this question could be addressed as something happening over time, so perhaps `year` on the x-axis. For one state this could be done by have a simple line chart with `year` on the x-axis and `crude_rate` on the y-axis. There could be one line for that particular state, and one for national average. 
+
+How would we do this for multiple states? Would we have a drop-down for each state? Having, a line for each state would be way too much data in the plot.
+Also we would need an additional drop-down for each disease type.
+
+**hover text**
+Line chart could have hover text that specifies year and disease rate when you hover over line.
+
+#### Example Plotly line chart
+
+Ok, first we need to get a national average number, per disease type, per year.
+
+```{r national-year-disease}
+# groupby year, then disease
+df_grp_yr_dis_avg_rate <- df %>% 
+  group_by(year, icd_chapter) %>% 
+  summarise(sum_crude_rate = sum(crude_rate),
+            count_dis_yr = n()) %>% 
+  mutate(avg_crude_rate_all = round(sum_crude_rate / count_dis_yr,1))
+
+# preview
+head(df_grp_yr_dis_avg_rate)
+
+```
+
+Now, I need to merge these two df's prevsering the one-to-many relationship.
+
+```{r merge}
+# merge on year and disease one-to-many
+df_merged_2 <- df_grp_yr_dis_avg_rate %>% 
+  left_join(df)
+
+# preview
+head(df_merged_2)
+```
+
+Ok, now lets map a basic line graph with `plotly` package with two lines on plot with one state, and one disease type. 
+
+```{r basic-plotly}
+# set var
+state = "NY"
+disease = "Certain conditions originating in the perinatal period"
+colors = c("#0C6291","#A63446")
+
+# filter for one state and one disease
+df_merged_2_ny <- df_merged_2[df_merged_2$state == state,] 
+df_merged_2_ny <- df_merged_2_ny[df_merged_2_ny$icd_chapter == disease,]
+
+# create plot and define xaxis
+fig <- plot_ly(data = df_merged_2_ny, x = ~year)
+
+# add state
+fig <- fig %>% add_trace(y = ~crude_rate, 
+                         type = "scatter",
+                         mode = "line",
+                         line = list(width=4,
+                                     color = colors[2]),
+                         name = state)
+# add national average
+fig <- fig %>% add_trace(y = ~avg_crude_rate_all, 
+                         type = "scatter",
+                         mode = "line",
+                         line = list(width=2, 
+                                     color = colors[1]),
+                         name = "National Avg")
+
+# add title and axis titles
+fig <- fig %>% layout(title = list(text =paste0("Crude Rate in ",state," vs. National Average \n",disease), y=0.96),
+        title = list(y=14),
+        xaxis = list(title = "Year"),
+        yaxis = list (title = "Crude Morality Rate"),
+        legend = list(x = 0.80, y = 0.9))
+
+fig
+```
+
