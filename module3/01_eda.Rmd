@@ -27,6 +27,8 @@ library(dotenv)
 Import dataset
 
 ```{r load-data}
+# setwd
+setwd("/Users/justinwilliams/Documents/CUNY SPS/CUNY_DATA_608/module3")
 # load data
 df <- read_csv("./data/cleaned-cdc-mortality-1999-2010-2.csv",
                show_col_types = F) %>% clean_names()
@@ -121,21 +123,22 @@ url <- "https://raw.githubusercontent.com/jasonong/List-of-US-States/master/stat
 df_state_abbr <- read_csv(url) %>% 
   clean_names() %>% 
   rename(name="state",state="abbreviation")
+
+head(df_state_abbr)
 ```
 
 Filter data by one disease and merge with shapefile.
 
-```{r filter-merge}
-# filter by 1 disease
-df_digestive <- df_2010[df_2010$icd_chapter == "Diseases of the digestive system",]
-
+```{r filter-merge, warning=FALSE}
 # merge state abbrev with gdf
 df_merged <- gdf_pop_2010 %>% 
-  geo_join(df_state_abbr,"name","name") %>% 
-  geo_join(df_digestive, "state", "state")
+  left_join(df_state_abbr,"name","name") %>% 
+  left_join(df_2010,"state","state", how="inner")
 
-# preview
-head(df_merged)
+# filter by 1 disease
+df_digestive <- df_merged[df_merged$icd_chapter == "Diseases of the digestive system",]
+
+df_digestive
 ```
 
 Ok, now we can plot a basic map using `leaflet`.
@@ -147,24 +150,24 @@ labels <- sprintf(
   <strong>Disease Type: </strong>%s<br/>
   <strong>Population: </strong>%s<br/>
   <strong>Crude Motality Rate: </strong>%g ",
-  df_merged$name,
-  df_merged$icd_chapter,
-  df_merged$population,
-  df_merged$crude_rate) %>% 
+  df_digestive$name,
+  df_digestive$icd_chapter,
+  df_digestive$population,
+  df_digestive$crude_rate) %>% 
   lapply(htmltools::HTML)
 
 # set bins
-bins <- getJenksBreaks(df_merged$crude_rate, 6) # get natural breaks
+bins <- getJenksBreaks(df_digestive$crude_rate, 6) # get natural breaks
 # bins <- map(.x = bins, round) %>% 
 #   unlist() # round
 
 # set color palette
 pal <- colorBin(palette = "PuBu",
                 bins = bins, 
-                domain = df_merged$crude_rate)
+                domain = df_digestive$crude_rate)
 
 # plot map
-leaflet_map <- df_merged %>% 
+leaflet_map <- df_digestive %>% 
    st_transform(4326) %>% 
    leaflet() %>%
    setView(lng = -95.7129,lat = 37.0902,zoom = 4) %>%
@@ -175,7 +178,7 @@ leaflet_map <- df_merged %>%
                smoothFactor = 0.5,
                opacity = 1,
                fillOpacity = 0.7,
-               fillColor = pal(df_merged$crude_rate),
+               fillColor = pal(df_digestive$crude_rate),
                highlightOptions = highlightOptions(weight = 1,
                                                    color = "#666",
                                                    fillOpacity = 0.7,
@@ -273,5 +276,28 @@ fig <- fig %>% layout(title = list(text =paste0("Crude Rate in ",state," vs. Nat
         legend = list(x = 0.80, y = 0.9))
 
 fig
+```
+
+### Export data 
+
+Export data frames for use in Shiny App.
+First get list
+
+```{r df-list}
+Filter(function(x) is(x, "data.frame"), mget(ls()))
+```
+
+Create list of df to export then loop through and export to app folder.
+
+```{r}
+# list of df
+df_export <- c("df_merged","df_merged_2")
+
+# save for use in shiny app
+for (i in 1:length(df_export)) {
+  savefile <- paste0(paste0("/Users/justinwilliams/Documents/CUNY SPS/CUNY_DATA_608/module3/cdc_disease_app/", df_export[i], ".Rds"))
+  saveRDS(get(df_export[i]), file = savefile)
+  print(paste("Dataframe Saved: ", df_export[i]))
+}
 ```
 
