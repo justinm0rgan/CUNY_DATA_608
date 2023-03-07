@@ -224,15 +224,16 @@ df_grp_yr_dis_avg_rate <- df %>%
 
 # preview
 head(df_grp_yr_dis_avg_rate)
-
 ```
 
 Now, I need to merge these two df's prevsering the one-to-many relationship.
 
 ```{r merge}
-# merge on year and disease one-to-many
+# merge on year and disease one-to-many and then state abbr
 df_merged_2 <- df_grp_yr_dis_avg_rate %>% 
-  left_join(df)
+  left_join(df) %>% 
+  left_join(df_state_abbr) %>% 
+  rename(disease = "icd_chapter")
 
 # preview
 head(df_merged_2)
@@ -248,7 +249,7 @@ colors = c("#0C6291","#A63446")
 
 # filter for one state and one disease
 df_merged_2_ny <- df_merged_2[df_merged_2$state == state,] 
-df_merged_2_ny <- df_merged_2_ny[df_merged_2_ny$icd_chapter == disease,]
+df_merged_2_ny <- df_merged_2_ny[df_merged_2_ny$disease == disease,]
 
 # create plot and define xaxis
 fig <- plot_ly(data = df_merged_2_ny, x = ~year)
