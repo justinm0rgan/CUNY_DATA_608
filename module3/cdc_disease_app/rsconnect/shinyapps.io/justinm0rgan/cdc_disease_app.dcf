@@ -1,0 +1,13 @@
+name: cdc_disease_app
+title: cdc_disease_app
+username:
+account: justinm0rgan
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 8546853
+bundleId: 6948941
+url: https://justinm0rgan.shinyapps.io/cdc_disease_app/
+when: 1678646459.92129
+lastSyncTime: 1678646459.9213
+asMultiple: FALSE
+asStatic: FALSE

@@ -19,8 +19,8 @@ library(scales)
 library(rsconnect)
 
 # read in data
-df_map <- readRDS("/Users/justinwilliams/Documents/CUNY SPS/CUNY_DATA_608/module3/cdc_disease_app/df_merged.Rds")
-df_char <- readRDS("/Users/justinwilliams/Documents/CUNY SPS/CUNY_DATA_608/module3/cdc_disease_app/df_merged_2.Rds")
+df_map <- readRDS("./df_merged.Rds")
+df_char <- readRDS("./df_merged_2.Rds")
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -194,7 +194,10 @@ server <- function(input, output) {
       
       # set bins
       bins <- getJenksBreaks(disease_type()$crude_rate, 6) # get natural breaks
-      
+      # if bins not unique
+      if (length(bins) > length(unique(bins))) {
+        bins <- getJenksBreaks(disease_type()$crude_rate,5)
+      }
       # set color palette
       pal <- colorBin(palette = "PuBu",
                       bins = bins, 
