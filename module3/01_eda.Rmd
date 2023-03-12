@@ -157,6 +157,7 @@ labels <- sprintf(
   lapply(htmltools::HTML)
 
 # set bins
+# conditional if not all unique
 bins <- getJenksBreaks(df_digestive$crude_rate, 6) # get natural breaks
 # bins <- map(.x = bins, round) %>% 
 #   unlist() # round
@@ -226,7 +227,7 @@ df_grp_yr_dis_avg_rate <- df %>%
 head(df_grp_yr_dis_avg_rate)
 ```
 
-Now, I need to merge these two df's prevsering the one-to-many relationship.
+Now, I need to merge these two df's presevring the one-to-many relationship.
 
 ```{r merge}
 # merge on year and disease one-to-many and then state abbr
