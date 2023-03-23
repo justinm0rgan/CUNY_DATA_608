@@ -1,9 +1,97 @@
 import pandas as pd
+import numpy as np
+import os
+import geopandas as gpd
+from dotenv import load_dotenv
+load_dotenv()
+from autocensus import Query
 import plotly.graph_objs as go
+# import dash_bootstrap_components as dbc
+# from dash_bootstrap_templates import load_figure_template
+# load_figure_template('DARKFLY')
 from dash import dash, dcc, html
 from dash.dependencies import Input, Output
 
-# fetch data
+# set api key
+MAPBOX_API = os.getenv("MAPBOX_API")
+CENSUS_API = os.getenv("CENSUS_API")
+
+# define external stylesheet
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+# fetch data for map
+soql_url_map = ('https://data.cityofnewyork.us/resource/nwxe-4ae8.json?' +\
+        '$select=boroname,count(tree_id)'+\
+        '&$group=boroname').replace(' ', '%20')
+soql_map= pd.read_json(soql_url_map)
+
+# configure query for map
+query = Query(
+    estimate=1,
+    years=[2019],
+    variables=["B03002_001E"],
+    for_geo=['county:005', 'county:047','county:061','county:081','county:085'],
+    in_geo=['state:36'],
+    # Optional arg to add geometry: 'points', 'polygons', or None (default)
+    geometry='polygons',
+    # Fill in the following with your actual Census API key
+    census_api_key=CENSUS_API
+)
+
+# Run query and collect output in dataframe
+soql_trees = query.run()
+
+# convert to gdf
+gdf = gpd.GeoDataFrame(soql_trees)
+
+# prep for merge
+# cond list
+conditions=[
+    gdf['name'] == "Bronx County, New York",
+    gdf['name'] == "Kings County, New York",
+    gdf['name'] == "New York County, New York",
+    gdf['name'] == "Richmond County, New York",
+    gdf['name'] == "Queens County, New York"
+]
+
+# value list
+values=["Bronx","Brooklyn","Manhattan","Staten Island","Queens"]
+
+# compute with np.select
+gdf['boroname'] = np.select(conditions,values)
+
+# merge gdf with soql 
+gdf=gdf.merge(soql_map)
+
+# create map plot
+trace = go.Choroplethmapbox(geojson=gdf.geometry.__geo_interface__,
+                            locations=gdf.index,
+                            z=gdf["count_tree_id"],
+                            colorscale="Viridis",
+                            colorbar=dict(
+                            bgcolor='rgba(0,0,0,0)', 
+                            bordercolor='rgba(0,0,0,0)'),
+                            zmin=0,
+                            zmax=max(gdf["count_tree_id"]),
+                            marker_opacity=0.5,
+                            marker_line_width=0,
+                            hovertemplate="<b>%{customdata[0]}</b><br><br>" +
+                                          "Count of Trees: %{z:,}<br>" +
+                                          "<extra></extra>",
+                            customdata=gdf[["boroname", "count_tree_id"]])
+
+# Define the layout for the map
+layout = go.Layout(
+                   mapbox_style="mapbox://styles/mapbox/light-v10",
+                   mapbox_zoom=9,
+                   mapbox_center={"lat": 40.7, "lon": -73.9},
+                   mapbox_accesstoken=MAPBOX_API,
+                   margin={"l": 0, "r": 0, "t": 30, "b": 0})
+
+# Create the figure with the trace and layout
+map = go.Figure(data=[trace], layout=layout)
+
+# fetch data for bar graph
 soql_url = ('https://data.cityofnewyork.us/resource/nwxe-4ae8.json?' +\
         '$select=coalesce(spc_common, "Unknown") as spc_common,boroname,count(tree_id),\
                 sum(case when health = "Fair" then 1 else 0 end) as fair_health,\
@@ -17,7 +105,7 @@ soql_url = ('https://data.cityofnewyork.us/resource/nwxe-4ae8.json?' +\
 # convert to df
 df=pd.read_json(soql_url)
 
-# fetch data for 2nd graph
+# fetch data for grouped bar graph
 soql_url_2 = ('https://data.cityofnewyork.us/resource/nwxe-4ae8.json?' +\
         '$select=coalesce(spc_common, "Unknown") as spc_common,boroname,count(tree_id),steward,\
                 round(100 * SUM(CASE WHEN health = "Poor" THEN 1 ELSE 0 END) / COUNT(tree_id),2) AS percent_poor_health,\
@@ -37,38 +125,69 @@ borough_list = df['boroname'].unique()
 borough_options = [{'label': borough, 'value': borough} for borough in borough_list]
 
 # create the Dash app
-app = dash.Dash(__name__)
+app = dash.Dash(__name__,external_stylesheets=external_stylesheets)
 
 # define the app layout
 app.layout = html.Div([
     html.H1('Tree Health in NYC'),
     html.Div([
-        html.Label('Select Tree Species:'),
+        dcc.Markdown(
+        '''
+        ##### Instructions:
+        Select borough by hovering over map area, select tree species from drop-down.
+        '''
+        ),
+        dcc.Graph(
+            id='nyc-county-map',
+            figure=map,
+            hoverData={'points': [{'customdata': ['Manhattan',0]}]}
+        ),
+
+        html.Br(),
+
+        dcc.Markdown(
+        '''
+        ##### Select Tree Species:
+        '''),
+
         dcc.Dropdown(
             id='species-dropdown',
             options=species_options,
             value=species_list[0]
-        )
-    ], style={'width': '40%', 'display': 'inline-block'}),
+        ),
+
+        html.Br(),
+        html.Br(),
+        html.Br(),
+        html.Br(),
+        html.Br(),
+        html.Br(),
+        html.Br(),
+        html.Br(),
+
+        dcc.Markdown(
+        '''
+        **Data Source:** [NYC Open Data - 2015 Street Tree Census](https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh)
+        ''',
+        link_target="_blank"
+    ),
+    ], style={'width': '50%', 'float':'left','display': 'inline-block', 'padding': '0 20'}),
+
     html.Div([
-        html.Label('Select Borough:'),
-        dcc.Dropdown(
-            id='borough-dropdown',
-            options=borough_options,
-            value=borough_list[0]
-        )
-    ], style={'width': '40%', 'display': 'inline-block'}),
-    dcc.Graph(id='health-graph'),
-    dcc.Graph(id='steward-graph')
-    ])
+        dcc.Graph(id='health-graph'),
+        dcc.Graph(id='steward-graph'),
+    ], style={'display': 'inline-block', 'float':'right','width': '50%'}),
+
+])
 
 # define the callback function for the health graph
 @app.callback(
     Output('health-graph', 'figure'),
     Input('species-dropdown', 'value'),
-    Input('borough-dropdown', 'value')
+    Input('nyc-county-map', 'hoverData')
 )
-def update_health_graph(species, borough):
+def update_health_graph(species, hoverData):
+    borough = hoverData['points'][0]['customdata'][0]
     # filter the data based on the selected species and borough
     df_filtered = df[(df['spc_common'] == species) & (df['boroname'] == borough)]
     good_pct = df_filtered['percent_good_health'].iloc[0]
@@ -88,7 +207,7 @@ def update_health_graph(species, borough):
     
     # update the layout
     fig.update_layout(
-        title=f'Health Percentage of {species} Trees in {borough}',
+        title=f'Health % of {species} Trees in {borough}',
         xaxis_title='Health',
         yaxis_title='Percentage',
         bargap=0.1,
@@ -102,10 +221,11 @@ def update_health_graph(species, borough):
 @app.callback(
     Output('steward-graph', 'figure'),
     Input('species-dropdown', 'value'),
-    Input('borough-dropdown', 'value')
+    Input('nyc-county-map', 'hoverData')
 )
 
-def update_steward_graph(species, borough):
+def update_steward_graph(species, hoverData):
+    borough = hoverData['points'][0]['customdata'][0]
     # filter the data based on the selected species and borough
     df_2_filtered = df_2[(df_2['spc_common'] == species) & (df_2['boroname'] == borough)]
 
@@ -145,7 +265,7 @@ def update_steward_graph(species, borough):
     
 # Update the layout
     fig.update_layout(
-        title=f'Health Status of {species} Percentage by Steward Type in {borough}',
+        title=f'Health Status of {species} % by Steward Type in {borough}',
         xaxis_title='Steward Type',
         yaxis_title='Percentage (%)',
         barmode='group',
